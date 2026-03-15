@@ -14,7 +14,6 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
@@ -112,9 +111,11 @@ public class MainActivity extends AppCompatActivity {
         if (!isCloudinaryInitialized) {
             try {
                 Map<String, String> config = new HashMap<>();
-                config.put("cloud_name", "YOUR_CLOUD_NAME");
-                config.put("api_key", "YOUR_API_KEY");
-                config.put("api_secret", "YOUR_API_SECRET");
+                // Securely load from local.properties via BuildConfig
+                config.put("cloud_name", BuildConfig.CLOUDINARY_CLOUD_NAME);
+                config.put("api_key", BuildConfig.CLOUDINARY_API_KEY);
+                config.put("api_secret", BuildConfig.CLOUDINARY_API_SECRET);
+
                 MediaManager.init(this, config);
                 isCloudinaryInitialized = true;
             } catch (Exception e) {
