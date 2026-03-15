@@ -1,9 +1,7 @@
-package com.example.auanalytics;
+package com.example.ohis;
 
 import android.os.Bundle;
 import androidx.appcompat.app.AppCompatActivity;
-
-import com.example.ohis.R;
 
 public class AnalyticsActivity extends AppCompatActivity {
     @Override

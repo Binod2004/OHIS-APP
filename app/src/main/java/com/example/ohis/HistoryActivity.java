@@ -1,11 +1,9 @@
-package com.example.auanalytics;
+package com.example.ohis;
 
 import android.os.Bundle;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import androidx.appcompat.app.AppCompatActivity;
-
-import com.example.ohis.R;
 
 import java.util.ArrayList;
 
