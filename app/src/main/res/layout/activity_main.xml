@@ -4,7 +4,8 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FAF3E0"
+    android:background="#F7F8FC"
+    android:theme="@style/Theme.MaterialComponents.Light.NoActionBar"
     tools:context=".MainActivity">
 
     <TextView
@@ -19,6 +20,19 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnFlash"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🔦 Flash"
+        android:textColor="#333333"
+        app:strokeColor="#333333"
+        app:layout_constraintBottom_toBottomOf="@id/tvHeader"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginEnd="24dp"
+        app:layout_constraintTop_toTopOf="@id/tvHeader" />
 
     <!-- Camera Card -->
     <androidx.cardview.widget.CardView
@@ -54,75 +68,65 @@
             android:alpha="0.2"
             android:visibility="visible" />
 
+        <!-- Beautiful Circular Progress Bar Overlay -->
+        <com.google.android.material.progressindicator.CircularProgressIndicator
+            android:id="@+id/uploadProgress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone"
+            app:indicatorColor="#FFA500"
+            app:trackColor="#E0E0E0"
+            app:indicatorSize="100dp"
+            app:trackThickness="10dp" />
+
     </androidx.cardview.widget.CardView>
 
-    <ProgressBar
-        android:id="@+id/uploadProgress"
-        style="?android:attr/progressBarStyleHorizontal"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="32dp"
-        android:layout_marginTop="16dp"
-        android:progressTint="#E91E63"
-        android:visibility="gone"
+    <!-- Morphing Circular Capture Button (Now locked to the center) -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnCapture"
+        android:layout_width="wrap_content"
+        android:layout_height="80dp"
+        android:layout_marginTop="24dp"
+        android:minWidth="80dp"
+        android:backgroundTint="#388E3C"
+        android:text="📷"
+        android:textSize="24sp"
+        android:textColor="#FFFFFF"
+        app:cornerRadius="40dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/cameraCard" />
 
-    <!-- Action Buttons -->
-    <LinearLayout
-        android:id="@+id/actionContainer"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="24dp"
-        android:layout_marginTop="24dp"
-        android:orientation="horizontal"
-        android:weightSum="2"
-        app:layout_constraintTop_toBottomOf="@id/uploadProgress">
+    <!-- Gallery Button (Anchored left of Capture) -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnGallery"
+        android:layout_width="wrap_content"
+        android:layout_height="60dp"
+        android:layout_marginEnd="16dp"
+        android:backgroundTint="#1E90FF"
+        android:text="Gallery"
+        android:textColor="#FFFFFF"
+        app:cornerRadius="20dp"
+        app:layout_constraintBottom_toBottomOf="@id/btnCapture"
+        app:layout_constraintEnd_toStartOf="@id/btnCapture"
+        app:layout_constraintTop_toTopOf="@id/btnCapture" />
 
-        <Button
-            android:id="@+id/btnGallery"
-            android:layout_width="0dp"
-            android:layout_height="60dp"
-            android:layout_marginEnd="8dp"
-            android:layout_weight="1"
-            android:backgroundTint="#D32F2F"
-            android:text="Gallery"
-            android:textColor="#FFFFFF" />
-
-        <Button
-            android:id="@+id/btnCapture"
-            android:layout_width="0dp"
-            android:layout_height="60dp"
-            android:layout_marginStart="8dp"
-            android:layout_weight="1"
-            android:backgroundTint="#388E3C"
-            android:text="Capture"
-            android:textColor="#FFFFFF" />
-
-        <Button
-            android:id="@+id/btnRetake"
-            android:layout_width="0dp"
-            android:layout_height="60dp"
-            android:layout_marginEnd="8dp"
-            android:layout_weight="1"
-            android:backgroundTint="#D32F2F"
-            android:text="Retake"
-            android:textColor="#FFFFFF"
-            android:visibility="gone" />
-
-        <Button
-            android:id="@+id/btnUpload"
-            android:layout_width="0dp"
-            android:layout_height="60dp"
-            android:layout_marginStart="8dp"
-            android:layout_weight="1"
-            android:backgroundTint="#388E3C"
-            android:enabled="false"
-            android:text="Upload"
-            android:textColor="#FFFFFF"
-            android:visibility="gone" />
-    </LinearLayout>
+    <!-- Upload Button (Anchored right of Capture) -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnUpload"
+        android:layout_width="wrap_content"
+        android:layout_height="60dp"
+        android:layout_marginStart="16dp"
+        android:backgroundTint="#FFA500"
+        android:enabled="false"
+        android:text="Upload 🚀"
+        android:textColor="#FFFFFF"
+        app:cornerRadius="20dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/btnCapture"
+        app:layout_constraintStart_toEndOf="@id/btnCapture"
+        app:layout_constraintTop_toTopOf="@id/btnCapture" />
 
     <!-- Navigation Buttons -->
     <Button

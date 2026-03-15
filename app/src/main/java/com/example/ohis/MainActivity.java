@@ -11,11 +11,14 @@ import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.Toast;
+import android.content.res.ColorStateList;
+import android.graphics.Color;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
@@ -42,13 +45,15 @@ public class MainActivity extends AppCompatActivity {
 
     private PreviewView viewFinder;
     private ImageView previewImage;
-    private Button btnCapture, btnGallery, btnUpload, btnRetake;
+    private Button btnCapture, btnGallery, btnUpload, btnFlash;
     private ProgressBar uploadProgress;
     private Uri imageUriToUpload;
     private boolean isCloudinaryInitialized = false;
+    private boolean isFlashOn = false;
 
     private ImageCapture imageCapture;
     private ExecutorService cameraExecutor;
+    private Camera camera;
 
     // Gallery picker launcher
     private final ActivityResultLauncher<String> galleryLauncher = registerForActivityResult(
@@ -82,7 +87,7 @@ public class MainActivity extends AppCompatActivity {
         btnCapture = findViewById(R.id.btnCapture);
         btnGallery = findViewById(R.id.btnGallery);
         btnUpload = findViewById(R.id.btnUpload);
-        btnRetake = findViewById(R.id.btnRetake);
+        btnFlash = findViewById(R.id.btnFlash);
         uploadProgress = findViewById(R.id.uploadProgress);
 
         Button btnAnalytics = findViewById(R.id.btnAnalytics);
@@ -97,9 +102,25 @@ public class MainActivity extends AppCompatActivity {
             requestPermissionLauncher.launch(Manifest.permission.CAMERA);
         }
 
-        btnCapture.setOnClickListener(v -> takePhoto());
+        btnCapture.setOnClickListener(v -> {
+            if (imageUriToUpload == null) {
+                takePhoto();
+            } else {
+                resetToCameraPreview();
+            }
+        });
+
         btnGallery.setOnClickListener(v -> galleryLauncher.launch("image/*"));
-        btnRetake.setOnClickListener(v -> resetToCameraPreview());
+
+        btnFlash.setOnClickListener(v -> {
+            if (camera != null && camera.getCameraInfo().hasFlashUnit()) {
+                isFlashOn = !isFlashOn;
+                camera.getCameraControl().enableTorch(isFlashOn);
+                btnFlash.setText(isFlashOn ? "🔦 Flash On" : "🔦 Flash Off");
+            } else {
+                Toast.makeText(this, "No flash available", Toast.LENGTH_SHORT).show();
+            }
+        });
 
         btnUpload.setOnClickListener(v -> {
             if (imageUriToUpload != null) {
@@ -125,7 +146,7 @@ public class MainActivity extends AppCompatActivity {
                 CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
 
                 cameraProvider.unbindAll();
-                cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageCapture);
+                camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageCapture);
 
             } catch (ExecutionException | InterruptedException e) {
                 Log.e(TAG, "Use case binding failed", e);
@@ -160,10 +181,14 @@ public class MainActivity extends AppCompatActivity {
         previewImage.setVisibility(View.VISIBLE);
         viewFinder.setVisibility(View.INVISIBLE); // Hide live camera
 
-        // Toggle buttons to focus on upload step
-        btnCapture.setVisibility(View.GONE);
+        // Toggle buttons: morph Capture to Re-Capture
+        btnCapture.setText("Re-Capture");
+        btnCapture.setTextSize(16);
+        btnCapture.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#D32F2F"))); // Red
+
         btnGallery.setVisibility(View.GONE);
-        btnRetake.setVisibility(View.VISIBLE);
+        btnFlash.setVisibility(View.GONE);
+
         btnUpload.setVisibility(View.VISIBLE);
         btnUpload.setEnabled(true);
     }
@@ -173,9 +198,14 @@ public class MainActivity extends AppCompatActivity {
         previewImage.setVisibility(View.GONE);
         viewFinder.setVisibility(View.VISIBLE);
 
-        btnCapture.setVisibility(View.VISIBLE);
+        // Toggle buttons: morph Re-Capture back to Circular Camera button
+        btnCapture.setText("📷");
+        btnCapture.setTextSize(24);
+        btnCapture.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#388E3C"))); // Green
+
         btnGallery.setVisibility(View.VISIBLE);
-        btnRetake.setVisibility(View.GONE);
+        btnFlash.setVisibility(View.VISIBLE);
+
         btnUpload.setVisibility(View.GONE);
         btnUpload.setEnabled(false);
 
@@ -215,7 +245,8 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void onProgress(String requestId, long bytes, long totalBytes) {
                         int progress = (int) ((bytes * 100) / totalBytes);
-                        runOnUiThread(() -> uploadProgress.setProgress(progress));
+                        // True enables smooth animation on Android 7+
+                        runOnUiThread(() -> uploadProgress.setProgress(progress, true));
                     }
 
                     @Override
@@ -223,7 +254,7 @@ public class MainActivity extends AppCompatActivity {
                         runOnUiThread(() -> {
                             Toast.makeText(MainActivity.this, "Upload Successful!", Toast.LENGTH_LONG).show();
                             resetToCameraPreview();
-                            btnUpload.setText("Upload");
+                            btnUpload.setText("Upload 🚀");
                             uploadProgress.setVisibility(View.GONE);
                         });
                     }
@@ -233,7 +264,7 @@ public class MainActivity extends AppCompatActivity {
                         runOnUiThread(() -> {
                             Toast.makeText(MainActivity.this, "Upload Failed: " + error.getDescription(), Toast.LENGTH_LONG).show();
                             btnUpload.setEnabled(true);
-                            btnUpload.setText("Upload");
+                            btnUpload.setText("Upload 🚀");
                             uploadProgress.setVisibility(View.GONE);
                         });
                     }
