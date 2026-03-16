@@ -21,6 +21,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
@@ -48,6 +49,7 @@ import com.cloudinary.android.callback.UploadCallback;
 import com.google.common.util.concurrent.ListenableFuture;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -73,9 +75,16 @@ public class MainActivity extends AppCompatActivity {
     private Button btnCapture, btnGallery, btnUpload, btnFlash;
     private ProgressBar uploadProgress;
 
-    private Uri imageUriToUpload;
+    private Uri imageUriToUpload; // 1. Raw Image
+    private Uri eyeUriToUpload;   // 2. Eye Segment (Sclera + Iris)
+    private Uri conjUriToUpload;  // 3. Conjunctiva Segment
+
     private boolean isCloudinaryInitialized = false;
     private boolean isFlashOn = false;
+
+    // Track 3-image multi-upload state
+    private int uploadCount = 0;
+    private int successfulUploads = 0;
 
     private ImageCapture imageCapture;
     private ExecutorService cameraExecutor;
@@ -155,13 +164,22 @@ public class MainActivity extends AppCompatActivity {
         });
 
         btnUpload.setOnClickListener(v -> {
-            if (imageUriToUpload != null) {
-                uploadToCloudinary(imageUriToUpload);
-            }
+            uploadAllImages();
         });
 
         btnAnalytics.setOnClickListener(v -> startActivity(new Intent(MainActivity.this, AnalyticsActivity.class)));
         btnHistory.setOnClickListener(v -> startActivity(new Intent(MainActivity.this, HistoryActivity.class)));
+    }
+
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+            if (imageUriToUpload == null) {
+                takePhoto();
+            }
+            return true;
+        }
+        return super.onKeyDown(keyCode, event);
     }
 
     private void startCamera() {
@@ -174,7 +192,6 @@ public class MainActivity extends AppCompatActivity {
                 Preview preview = new Preview.Builder().build();
                 preview.setSurfaceProvider(viewFinder.getSurfaceProvider());
 
-                // FORCE MAXIMUM QUALITY (Reduces compression artifacts and blur)
                 imageCapture = new ImageCapture.Builder()
                         .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
                         .build();
@@ -242,7 +259,6 @@ public class MainActivity extends AppCompatActivity {
 
                 new Handler(Looper.getMainLooper()).post(() -> previewImage.setImageBitmap(uprightBitmap));
 
-                // Launch the new Commercial Erythema Region-Growing Engine
                 extractBiomarkers(uprightBitmap);
 
             } catch (Exception e) {
@@ -252,19 +268,14 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    /**
-     * ADVANCED TISSUE EXTRACTION ENGINE
-     * Combines the "Good" geometric pupil-hunting algorithm for the Eye
-     * with the Erythema Region-Growing algorithm for the Conjunctiva.
-     */
     private void extractBiomarkers(Bitmap originalBitmap) {
         int origW = originalBitmap.getWidth();
         int origH = originalBitmap.getHeight();
 
         // ==========================================
-        // STEP 1: THE "GOOD" METHOD FOR EYE (PUPIL HUNTING OVAL)
+        // STEP 1: EYE (PUPIL HUNTING OVAL)
         // ==========================================
-        int scaleSmall = 300; // Increased precision to perfectly lock onto the pupil center
+        int scaleSmall = 300;
         Bitmap tinyBmp = Bitmap.createScaledBitmap(originalBitmap, scaleSmall, scaleSmall, false);
 
         int bestPupilX = scaleSmall / 2;
@@ -272,13 +283,12 @@ public class MainActivity extends AppCompatActivity {
         int maxContrastScore = -1;
         int searchRadius = scaleSmall / 8;
 
-        // Pass 1: Find the maximum contrast score in the image
         for (int y = searchRadius; y < scaleSmall - searchRadius; y += 2) {
             for (int x = searchRadius; x < scaleSmall - searchRadius; x += 2) {
                 int centerPixel = tinyBmp.getPixel(x, y);
                 int centerBrightness = getBrightness(centerPixel);
 
-                if (centerBrightness > 120) continue; // Skip bright spots
+                if (centerBrightness > 120) continue;
 
                 int leftBrightness = getBrightness(tinyBmp.getPixel(x - searchRadius, y));
                 int rightBrightness = getBrightness(tinyBmp.getPixel(x + searchRadius, y));
@@ -291,7 +301,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // Pass 2: "Center of Mass" Math for PERFECT centering
         int sumX = 0, sumY = 0, count = 0;
         if (maxContrastScore > 0) {
             for (int y = searchRadius; y < scaleSmall - searchRadius; y += 2) {
@@ -304,7 +313,6 @@ public class MainActivity extends AppCompatActivity {
                     int rightBrightness = getBrightness(tinyBmp.getPixel(x + searchRadius, y));
                     int contrastScore = ((leftBrightness + rightBrightness) / 2) - centerBrightness;
 
-                    // Group all pixels that score in the top 10%
                     if (contrastScore >= maxContrastScore * 0.90f) {
                         sumX += x;
                         sumY += y;
@@ -324,7 +332,6 @@ public class MainActivity extends AppCompatActivity {
         float eyeRadiusX = origW * 0.35f;
         float eyeRadiusY = origW * 0.20f;
 
-        // PERFECT CENTERING: Force the crop bounding box to be absolutely symmetric.
         float safeRadiusX = Math.min(eyeRadiusX, Math.min(actualPupilX, origW - actualPupilX));
         float safeRadiusY = Math.min(eyeRadiusY, Math.min(actualPupilY, origH - actualPupilY));
 
@@ -338,9 +345,9 @@ public class MainActivity extends AppCompatActivity {
         Bitmap finalEye = extractTransparentGeometricRegion(originalBitmap, eyeBounds, true);
 
         // ==========================================
-        // STEP 2: ADVANCED FLOOD FILL FOR CONJUNCTIVA
+        // STEP 2: CONJUNCTIVA (FLOOD FILL)
         // ==========================================
-        int processWidth = 600; // DOUBLED RESOLUTION for massive precision increase on vascular edges!
+        int processWidth = 600;
         int processHeight = (int) ((float) origH / origW * processWidth);
         Bitmap scaled = Bitmap.createScaledBitmap(originalBitmap, processWidth, processHeight, false);
 
@@ -354,7 +361,6 @@ public class MainActivity extends AppCompatActivity {
         int mucosalSeedIdx = -1;
         float[] hsv = new float[3];
 
-        // Ensure we only search for conjunctiva strictly BELOW the pupil
         int pupilYInProcessScale = (int) (((float) bestPupilY / scaleSmall) * h);
 
         for (int i = 0; i < pixels.length; i++) {
@@ -374,7 +380,6 @@ public class MainActivity extends AppCompatActivity {
 
             if (score > maxMucosalScore) {
                 int yPos = i / w;
-                // Heuristic: Must be below the pupil!
                 if (yPos > pupilYInProcessScale + (h * 0.05f)) {
                     maxMucosalScore = score;
                     mucosalSeedIdx = i;
@@ -387,12 +392,31 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Flood Fill to extract ONLY the connected mucosal tissue
         boolean[] conjunctivaMask = floodFill(w, h, mucosalSeedIdx, mucosalScores, maxMucosalScore * 0.45f);
 
         Bitmap finalConjunctiva = applyMaskToOriginal(originalBitmap, conjunctivaMask, w, h);
 
+        // ==========================================
+        // STEP 3: CACHE FOR UPLOAD
+        // ==========================================
+        eyeUriToUpload = saveBitmapToCache(finalEye, "eye_segment");
+        conjUriToUpload = saveBitmapToCache(finalConjunctiva, "conj_segment");
+
         showResults(finalEye, finalConjunctiva);
+    }
+
+    private Uri saveBitmapToCache(Bitmap bitmap, String namePrefix) {
+        try {
+            File file = new File(getCacheDir(), namePrefix + "_" + System.currentTimeMillis() + ".png");
+            FileOutputStream out = new FileOutputStream(file);
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
+            out.flush();
+            out.close();
+            return Uri.fromFile(file);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to cache bitmap for upload", e);
+            return null;
+        }
     }
 
     private int getBrightness(int color) {
@@ -426,11 +450,6 @@ public class MainActivity extends AppCompatActivity {
         return Bitmap.createBitmap(output, left, top, width, height);
     }
 
-    /**
-     * Magic Wand / Region Growing Algorithm.
-     * Starts at the 'seed' pixel and expands outwards as long as neighboring pixels
-     * meet the strict threshold for the specific tissue type.
-     */
     private boolean[] floodFill(int w, int h, int seedIdx, float[] scores, float threshold) {
         boolean[] mask = new boolean[w * h];
         boolean[] visited = new boolean[w * h];
@@ -456,7 +475,6 @@ public class MainActivity extends AppCompatActivity {
                     int nIdx = ny * w + nx;
                     if (!visited[nIdx]) {
                         visited[nIdx] = true;
-                        // If this neighboring pixel is highly similar to our target tissue, add it!
                         if (scores[nIdx] >= threshold) {
                             mask[nIdx] = true;
                             queue.add(nIdx);
@@ -468,15 +486,10 @@ public class MainActivity extends AppCompatActivity {
         return mask;
     }
 
-    /**
-     * Completely re-engineered for High Fidelity.
-     * Generates a perfectly anti-aliased bitmap mask, completely eliminating jagged Minecraft edges.
-     */
     private Bitmap applyMaskToOriginal(Bitmap original, boolean[] smallMask, int smallW, int smallH) {
         int origW = original.getWidth();
         int origH = original.getHeight();
 
-        // Find Bounding Box of the mask
         int minX = smallW, minY = smallH, maxX = 0, maxY = 0;
         boolean hasPixels = false;
 
@@ -504,7 +517,6 @@ public class MainActivity extends AppCompatActivity {
 
         if (cropW <= 0 || cropH <= 0) return original;
 
-        // --- THE FIX: SMOOTH BILINEAR MASK GENERATION ---
         int maskCropW = maxX - minX + 1;
         int maskCropH = maxY - minY + 1;
         int[] maskPixels = new int[maskCropW * maskCropH];
@@ -519,21 +531,15 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // Create the small mask image
         Bitmap tinyMaskBitmap = Bitmap.createBitmap(maskPixels, maskCropW, maskCropH, Bitmap.Config.ARGB_8888);
-
-        // Magically smooth and scale it up using hardware interpolation (true = smooth!)
         Bitmap smoothMask = Bitmap.createScaledBitmap(tinyMaskBitmap, cropW, cropH, true);
 
-        // --- APPLY THE SILKY SMOOTH MASK ---
         Bitmap output = Bitmap.createBitmap(cropW, cropH, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(output);
 
-        // 1. Draw the buttery smooth mask
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         canvas.drawBitmap(smoothMask, 0, 0, paint);
 
-        // 2. Lay the original high-resolution photo on top!
         paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
         Rect srcRect = new Rect(cropX, cropY, cropX + cropW, cropY + cropH);
         Rect destRect = new Rect(0, 0, cropW, cropH);
@@ -550,7 +556,7 @@ public class MainActivity extends AppCompatActivity {
             segmentationLayout.setVisibility(View.VISIBLE);
             uploadProgress.setVisibility(View.GONE);
             btnUpload.setEnabled(true);
-            btnUpload.setText("Upload 🚀");
+            btnUpload.setText("Upload 3 Images 🚀");
             btnUpload.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#FFA500")));
         });
     }
@@ -587,6 +593,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void resetToCameraPreview() {
         imageUriToUpload = null;
+        eyeUriToUpload = null;
+        conjUriToUpload = null;
+
         previewContainer.setVisibility(View.GONE);
         segmentationLayout.setVisibility(View.INVISIBLE);
 
@@ -604,68 +613,96 @@ public class MainActivity extends AppCompatActivity {
         btnUpload.setEnabled(false);
 
         uploadProgress.setVisibility(View.GONE);
-        uploadProgress.setProgress(0);
     }
 
     private void initCloudinary() {
-        if (!isCloudinaryInitialized) {
+        try {
+            // Check if it's already alive to prevent the double-init crash 💀
+            MediaManager.get();
+            isCloudinaryInitialized = true;
+        } catch (IllegalStateException e) {
             try {
                 Map<String, String> config = new HashMap<>();
                 config.put("cloud_name", BuildConfig.CLOUDINARY_CLOUD_NAME);
                 config.put("api_key", BuildConfig.CLOUDINARY_API_KEY);
                 config.put("api_secret", BuildConfig.CLOUDINARY_API_SECRET);
-
                 MediaManager.init(this, config);
                 isCloudinaryInitialized = true;
-            } catch (Exception e) {
-                Log.w(TAG, "Cloudinary initialization: " + e.getMessage());
+            } catch (Exception ex) {
+                Log.e(TAG, "Cloudinary Init Failed (Check Config/API Keys!): " + ex.getMessage());
             }
         }
     }
 
-    private void uploadToCloudinary(Uri fileUri) {
-        Toast.makeText(this, "Uploading...", Toast.LENGTH_SHORT).show();
+    private void uploadAllImages() {
+        if (imageUriToUpload == null || eyeUriToUpload == null || conjUriToUpload == null) {
+            Toast.makeText(this, "Wait for processing to finish!", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         btnUpload.setEnabled(false);
-        btnUpload.setText("Uploading...");
+        btnUpload.setText("Uploading 0/3...");
         btnUpload.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#808080")));
 
         uploadProgress.setVisibility(View.VISIBLE);
-        uploadProgress.setProgress(0);
+        uploadProgress.setIndeterminate(true);
 
-        MediaManager.get().upload(fileUri)
-                .callback(new UploadCallback() {
-                    @Override
-                    public void onStart(String requestId) {}
+        uploadCount = 0;
+        successfulUploads = 0;
 
-                    @Override
-                    public void onProgress(String requestId, long bytes, long totalBytes) {
-                        int progress = (int) ((bytes * 100) / totalBytes);
-                        runOnUiThread(() -> uploadProgress.setProgress(progress, true));
-                    }
+        // Launch all three simultaneously
+        uploadSingleToCloudinary(imageUriToUpload, "raw_capture");
+        uploadSingleToCloudinary(eyeUriToUpload, "eye_segment");
+        uploadSingleToCloudinary(conjUriToUpload, "conjunctiva_segment");
+    }
 
-                    @Override
-                    public void onSuccess(String requestId, Map resultData) {
-                        runOnUiThread(() -> {
-                            Toast.makeText(MainActivity.this, "Upload Successful!", Toast.LENGTH_LONG).show();
-                            resetToCameraPreview();
-                        });
-                    }
+    private void uploadSingleToCloudinary(Uri fileUri, String tag) {
+        try {
+            MediaManager.get().upload(fileUri)
+                    .option("tags", tag) // Tags help you sort them in your Cloudinary Dashboard
+                    .callback(new UploadCallback() {
+                        @Override public void onStart(String requestId) {}
+                        @Override public void onProgress(String requestId, long bytes, long totalBytes) {}
 
-                    @Override
-                    public void onError(String requestId, ErrorInfo error) {
-                        runOnUiThread(() -> {
-                            Toast.makeText(MainActivity.this, "Upload Failed: " + error.getDescription(), Toast.LENGTH_LONG).show();
-                            btnUpload.setEnabled(true);
-                            btnUpload.setText("Upload 🚀");
-                            btnUpload.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#FFA500")));
-                            uploadProgress.setVisibility(View.GONE);
-                        });
-                    }
+                        @Override public void onSuccess(String requestId, Map resultData) {
+                            handleUploadComplete(true);
+                        }
 
-                    @Override
-                    public void onReschedule(String requestId, ErrorInfo error) {}
-                })
-                .dispatch();
+                        @Override public void onError(String requestId, ErrorInfo error) {
+                            Log.e(TAG, "Cloudinary Upload Failed for " + tag + ": " + error.getDescription());
+                            handleUploadComplete(false);
+                        }
+
+                        @Override public void onReschedule(String requestId, ErrorInfo error) {}
+                    })
+                    .dispatch();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to dispatch upload: ", e);
+            handleUploadComplete(false);
+        }
+    }
+
+    private synchronized void handleUploadComplete(boolean success) {
+        uploadCount++;
+        if (success) successfulUploads++;
+
+        runOnUiThread(() -> {
+            btnUpload.setText("Uploading " + uploadCount + "/3...");
+
+            if (uploadCount == 3) {
+                uploadProgress.setVisibility(View.GONE);
+
+                if (successfulUploads == 3) {
+                    Toast.makeText(MainActivity.this, "All 3 Images Uploaded Successfully! 🚀", Toast.LENGTH_LONG).show();
+                    resetToCameraPreview();
+                } else {
+                    Toast.makeText(MainActivity.this, "Some uploads failed! Check network/API keys.", Toast.LENGTH_LONG).show();
+                    btnUpload.setEnabled(true);
+                    btnUpload.setText("Retry Upload");
+                    btnUpload.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#FFA500")));
+                }
+            }
+        });
     }
 
     @Override
