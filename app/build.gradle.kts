@@ -63,6 +63,10 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
 
+    //Implemented ML Kit for face detection
+    implementation("com.google.mlkit:face-detection:16.1.6")
+    implementation("com.google.mediapipe:tasks-vision:0.10.14")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)

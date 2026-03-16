@@ -34,33 +34,44 @@
         android:layout_marginEnd="24dp"
         app:layout_constraintTop_toTopOf="@id/tvHeader" />
 
-    <!-- Camera Card -->
+    <!-- Error Message TextView -->
+    <TextView
+        android:id="@+id/tvErrorMessage"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Error: No clear eye detected!"
+        android:textColor="#D32F2F"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvHeader" />
+
+    <!-- Camera / Preview Card -->
     <androidx.cardview.widget.CardView
         android:id="@+id/cameraCard"
         android:layout_width="match_parent"
         android:layout_height="380dp"
         android:layout_marginHorizontal="24dp"
-        android:layout_marginTop="24dp"
+        android:layout_marginTop="16dp"
+        app:cardBackgroundColor="#55CAFF"
         app:cardCornerRadius="24dp"
         app:cardElevation="12dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvHeader">
+        app:layout_constraintTop_toBottomOf="@id/tvErrorMessage">
 
+        <!-- Live Camera Feed -->
         <androidx.camera.view.PreviewView
             android:id="@+id/viewFinder"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
-        <ImageView
-            android:id="@+id/previewImage"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:scaleType="centerCrop"
-            android:visibility="gone" />
-
         <!-- Subtle overlay to hint at eye alignment -->
         <View
+            android:id="@+id/alignmentOverlay"
             android:layout_width="120dp"
             android:layout_height="80dp"
             android:layout_gravity="center"
@@ -68,7 +79,80 @@
             android:alpha="0.2"
             android:visibility="visible" />
 
-        <!-- Beautiful Circular Progress Bar Overlay -->
+        <!-- Preview & Segmentation Container -->
+        <LinearLayout
+            android:id="@+id/previewContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:background="#F7F8FC"
+            android:visibility="gone"
+            android:weightSum="2">
+
+            <!-- Original Image -->
+            <ImageView
+                android:id="@+id/previewImage"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:scaleType="centerCrop" />
+
+            <!-- Segmented Results -->
+            <LinearLayout
+                android:id="@+id/segmentationLayout"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:visibility="invisible">
+
+                <!-- Eye Segment -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:padding="8dp">
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Eye"
+                        android:textStyle="bold"
+                        android:textAlignment="center"
+                        android:textColor="#333333"/>
+                    <ImageView
+                        android:id="@+id/imgEyeSegment"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitCenter" />
+                </LinearLayout>
+
+                <!-- Conjunctiva Segment -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:padding="8dp">
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Conjunctiva"
+                        android:textStyle="bold"
+                        android:textAlignment="center"
+                        android:textColor="#333333"/>
+                    <ImageView
+                        android:id="@+id/imgConjunctivaSegment"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitCenter" />
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- Processing / Upload Progress Bar -->
         <com.google.android.material.progressindicator.CircularProgressIndicator
             android:id="@+id/uploadProgress"
             android:layout_width="wrap_content"
@@ -77,12 +161,12 @@
             android:visibility="gone"
             app:indicatorColor="#FFA500"
             app:trackColor="#E0E0E0"
-            app:indicatorSize="100dp"
-            app:trackThickness="10dp" />
+            app:indicatorSize="80dp"
+            app:trackThickness="8dp" />
 
     </androidx.cardview.widget.CardView>
 
-    <!-- Morphing Circular Capture Button (Now locked to the center) -->
+    <!-- Morphing Circular Capture Button -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnCapture"
         android:layout_width="wrap_content"
@@ -98,7 +182,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/cameraCard" />
 
-    <!-- Gallery Button (Anchored left of Capture) -->
+    <!-- Gallery Button -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnGallery"
         android:layout_width="wrap_content"
@@ -112,7 +196,7 @@
         app:layout_constraintEnd_toStartOf="@id/btnCapture"
         app:layout_constraintTop_toTopOf="@id/btnCapture" />
 
-    <!-- Upload Button (Anchored right of Capture) -->
+    <!-- Upload Button -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnUpload"
         android:layout_width="wrap_content"
