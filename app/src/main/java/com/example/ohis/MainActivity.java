@@ -113,6 +113,12 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // HIDE THE "OHIS" ACTION BAR
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().hide();
+        }
+
         setContentView(R.layout.activity_main);
 
         initCloudinary();
@@ -304,27 +310,6 @@ public class MainActivity extends AppCompatActivity {
         return dx + dy;
     }
 
-// =====================================================================
-// DROP-IN REPLACEMENT for extractBiomarkers() in MainActivity.java
-//
-// KEY FIXES:
-//   EYE:
-//     1. Scale to 400 (was 300) — more search resolution, fewer missed pupils
-//     2. searchRadius = scaleSmall/6 (was /8) — matches expected pupil size better
-//     3. score² weighting + top-5% threshold — pulls centroid tightly to true
-//        pupil center instead of smearing across all dark-ish pixels
-//     4. Fixed oval radii (32%/18%) — no longer clipped by edge distance, which
-//        was the main reason eye crops came out tiny/lopsided
-//
-//   CONJUNCTIVA:
-//     1. Seed search restricted to bottom 30% of image (was only 5% below pupil)
-//        — conjunctiva is in the everted lower eyelid, always near the bottom
-//     2. Skin tone penalty: hue 0–30° (orange-red skin) gets score halved so
-//        cheek/eyelid skin can't outscore actual mucosal tissue
-//     3. Flood fill threshold raised to 0.55× (was 0.45×) — stops bleeds into
-//        adjacent skin and iris while still capturing all conjunctiva
-// =====================================================================
-
     private void extractBiomarkers(Bitmap originalBitmap) {
         int origW = originalBitmap.getWidth();
         int origH = originalBitmap.getHeight();
@@ -333,17 +318,14 @@ public class MainActivity extends AppCompatActivity {
         // STEP 1: EYE — pupil-hunting oval
         // =========================================================
 
-        // FIX 1a: Use 400px scale for better pupil resolution
         final int SCALE_EYE = 400;
         Bitmap tinyBmp = Bitmap.createScaledBitmap(originalBitmap, SCALE_EYE, SCALE_EYE, false);
 
         int bestPupilX = SCALE_EYE / 2;
         int bestPupilY = SCALE_EYE / 2;
 
-        // FIX 1b: Larger search radius matches actual pupil-to-sclera contrast span
         int searchRadius = SCALE_EYE / 6;
 
-        // Pass 1 — find the absolute maximum contrast score
         float maxContrastScore = -1;
         for (int y = searchRadius; y < SCALE_EYE - searchRadius; y += 2) {
             for (int x = searchRadius; x < SCALE_EYE - searchRadius; x += 2) {
@@ -355,7 +337,6 @@ public class MainActivity extends AppCompatActivity {
                 int topBrightness   = getBrightness(tinyBmp.getPixel(x, y - searchRadius));
                 int botBrightness   = getBrightness(tinyBmp.getPixel(x, y + searchRadius));
 
-                // Average all 4 surrounding points for robustness
                 float surroundAvg = (leftBrightness + rightBrightness + topBrightness + botBrightness) / 4f;
                 float contrastScore = surroundAvg - centerBrightness;
                 if (contrastScore > maxContrastScore) {
@@ -364,9 +345,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // Pass 2 — weighted centroid using only top 5% of candidates
-        // FIX 1c: score² weighting pulls centroid sharply toward the true peak,
-        //         ignoring fringe dark pixels that dragged it off-center before
         if (maxContrastScore > 0) {
             float threshold = maxContrastScore * 0.95f; // top 5% only
             double weightedSumX = 0, weightedSumY = 0, totalWeight = 0;
@@ -402,14 +380,9 @@ public class MainActivity extends AppCompatActivity {
         float actualPupilX = ((float) bestPupilX / SCALE_EYE) * origW;
         float actualPupilY = ((float) bestPupilY / SCALE_EYE) * origH;
 
-        // FIX 1d: Use FIXED radii — do NOT clip to distance-to-edge.
-        //         The old safeRadius shrank whenever the pupil drifted slightly off
-        //         center, giving half-width ovals. A fixed ratio is far more stable.
         float eyeRadiusX = origW * 0.32f;
         float eyeRadiusY = origW * 0.18f;
 
-        // Clamp the CENTER so the oval never goes out of bounds, instead of
-        // shrinking the radii — this keeps the oval shape consistent.
         float clampedPupilX = Math.max(eyeRadiusX, Math.min(origW - eyeRadiusX, actualPupilX));
         float clampedPupilY = Math.max(eyeRadiusY, Math.min(origH - eyeRadiusY, actualPupilY));
 
@@ -440,9 +413,6 @@ public class MainActivity extends AppCompatActivity {
         int   mucosalSeedIdx   = -1;
         float[] hsv = new float[3];
 
-        // FIX 2a: Restrict seed search to the bottom 30% of the image.
-        //         Conjunctiva is only visible in the everted lower eyelid.
-        //         The old 5%-below-pupil guard let noisy mid-image pixels win.
         int seedSearchStartY = (int) (h * 0.70f);
 
         for (int i = 0; i < pixels.length; i++) {
@@ -460,17 +430,12 @@ public class MainActivity extends AppCompatActivity {
             float score = saturation * vascularity;
             if (score < 0) score = 0;
 
-            // FIX 2b: Penalize skin tones (hue 0–30° = orange-red skin/eyelid).
-            //         Conjunctiva is a brighter, more saturated pinkish-red (hue ~330–10°
-            //         or 340–360°) but healthy conjunctiva also has distinctive high
-            //         vascularity. Skin in hue 10–30° range is orange — penalize it.
             if (hue >= 10f && hue <= 30f) {
                 score *= 0.4f; // strongly penalize skin-orange
             }
 
             mucosalScores[i] = score;
 
-            // Only consider pixels in the seed zone AND above a minimum score
             if (yPos >= seedSearchStartY && score > 10f && score > maxMucosalScore) {
                 maxMucosalScore = score;
                 mucosalSeedIdx  = i;
@@ -482,9 +447,6 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // FIX 2c: Raise flood fill threshold from 0.45× to 0.55× — this stops the
-        //         region bleeding into adjacent skin while still capturing all the
-        //         vascularised conjunctival tissue.
         boolean[] conjunctivaMask = floodFill(w, h, mucosalSeedIdx, mucosalScores, maxMucosalScore * 0.55f);
 
         Bitmap finalConjunctiva = applyMaskToOriginal(originalBitmap, conjunctivaMask, w, h);
@@ -496,7 +458,9 @@ public class MainActivity extends AppCompatActivity {
         conjUriToUpload  = saveBitmapToCache(finalConjunctiva,  "conj_segment");
 
         showResults(finalEye, finalConjunctiva);
-    }    private Uri saveBitmapToCache(Bitmap bitmap, String namePrefix) {
+    }
+
+    private Uri saveBitmapToCache(Bitmap bitmap, String namePrefix) {
         try {
             File file = new File(getCacheDir(), namePrefix + "_" + System.currentTimeMillis() + ".png");
             FileOutputStream out = new FileOutputStream(file);
