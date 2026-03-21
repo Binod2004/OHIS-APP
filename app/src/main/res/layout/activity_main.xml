@@ -1,255 +1,257 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F7F8FC"
-    android:theme="@style/Theme.MaterialComponents.Light.NoActionBar"
-    tools:context=".MainActivity">
+    android:fillViewport="true"
+    android:background="#F7F8FC">
 
-    <TextView
-        android:id="@+id/tvHeader"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
-        android:text="Eye Scan"
-        android:textColor="#333333"
-        android:textSize="28sp"
-        android:textStyle="bold"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnFlash"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="🔦 Flash"
-        android:textColor="#333333"
-        app:strokeColor="#333333"
-        app:layout_constraintBottom_toBottomOf="@id/tvHeader"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginEnd="16dp"
-        app:layout_constraintTop_toTopOf="@id/tvHeader" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnSwitchCamera"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="🔄"
-        android:textColor="#333333"
-        app:strokeColor="#333333"
-        app:layout_constraintBottom_toBottomOf="@id/tvHeader"
-        app:layout_constraintStart_toStartOf="parent"
-        android:layout_marginStart="16dp"
-        app:layout_constraintTop_toTopOf="@id/tvHeader" />
-
-    <!-- Error Message TextView -->
-    <TextView
-        android:id="@+id/tvErrorMessage"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="Error: No clear eye detected!"
-        android:textColor="#D32F2F"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:visibility="gone"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvHeader" />
-
-    <!-- Camera / Preview Card -->
-    <androidx.cardview.widget.CardView
-        android:id="@+id/cameraCard"
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
-        android:layout_height="380dp"
-        android:layout_marginHorizontal="24dp"
-        android:layout_marginTop="16dp"
-        app:cardBackgroundColor="#55CAFF"
-        app:cardCornerRadius="24dp"
-        app:cardElevation="12dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvErrorMessage">
+        android:layout_height="wrap_content"
+        android:paddingBottom="24dp"
+        android:theme="@style/Theme.MaterialComponents.Light.NoActionBar"
+        tools:context=".MainActivity">
 
-        <!-- Live Camera Feed -->
-        <androidx.camera.view.PreviewView
-            android:id="@+id/viewFinder"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-
-        <!-- Subtle overlay to hint at eye alignment -->
-        <View
-            android:id="@+id/alignmentOverlay"
-            android:layout_width="120dp"
-            android:layout_height="80dp"
-            android:layout_gravity="center"
-            android:background="@drawable/ic_launcher_background"
-            android:alpha="0.2"
-            android:visibility="visible" />
-
-        <!-- Preview & Segmentation Container -->
-        <LinearLayout
-            android:id="@+id/previewContainer"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:background="#F7F8FC"
-            android:visibility="gone"
-            android:weightSum="2">
-
-            <!-- Original Image -->
-            <ImageView
-                android:id="@+id/previewImage"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:scaleType="centerCrop" />
-
-            <!-- Segmented Results -->
-            <LinearLayout
-                android:id="@+id/segmentationLayout"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:orientation="horizontal"
-                android:visibility="invisible">
-
-                <!-- Eye Segment -->
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:padding="8dp">
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Eye"
-                        android:textStyle="bold"
-                        android:textAlignment="center"
-                        android:textColor="#333333"/>
-                    <ImageView
-                        android:id="@+id/imgEyeSegment"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:scaleType="fitCenter" />
-                </LinearLayout>
-
-                <!-- Conjunctiva Segment -->
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:padding="8dp">
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Conjunctiva"
-                        android:textStyle="bold"
-                        android:textAlignment="center"
-                        android:textColor="#333333"/>
-                    <ImageView
-                        android:id="@+id/imgConjunctivaSegment"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:scaleType="fitCenter" />
-                </LinearLayout>
-
-            </LinearLayout>
-
-        </LinearLayout>
-
-        <!-- Processing / Upload Progress Bar -->
-        <com.google.android.material.progressindicator.CircularProgressIndicator
-            android:id="@+id/uploadProgress"
+        <TextView
+            android:id="@+id/tvHeader"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center"
+            android:layout_marginTop="24dp"
+            android:text="Eye Scan"
+            android:textColor="#333333"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnFlash"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="16dp"
+            android:text="🔦 Flash"
+            android:textColor="#333333"
+            app:layout_constraintBottom_toBottomOf="@id/tvHeader"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="@id/tvHeader"
+            app:strokeColor="#333333" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSwitchCamera"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:text="🔄"
+            android:textColor="#333333"
+            app:layout_constraintBottom_toBottomOf="@id/tvHeader"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="@id/tvHeader"
+            app:strokeColor="#333333" />
+
+        <!-- Error Message TextView -->
+        <TextView
+            android:id="@+id/tvErrorMessage"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="24dp"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:text="Error: No clear eye detected!"
+            android:textColor="#D32F2F"
+            android:textSize="14sp"
+            android:textStyle="bold"
             android:visibility="gone"
-            app:indicatorColor="#FFA500"
-            app:trackColor="#E0E0E0"
-            app:indicatorSize="80dp"
-            app:trackThickness="8dp" />
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/tvHeader" />
 
-    </androidx.cardview.widget.CardView>
+        <!-- Camera / Preview Card -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cameraCard"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_marginHorizontal="24dp"
+            android:layout_marginTop="16dp"
+            app:cardBackgroundColor="#55CAFF"
+            app:cardCornerRadius="24dp"
+            app:cardElevation="8dp"
+            app:layout_constraintDimensionRatio="H,1:1.1"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/tvErrorMessage">
 
-    <!-- Morphing Circular Capture Button -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnCapture"
-        android:layout_width="wrap_content"
-        android:layout_height="80dp"
-        android:layout_marginTop="24dp"
-        android:minWidth="80dp"
-        android:backgroundTint="#388E3C"
-        android:text="📷"
-        android:textSize="24sp"
-        android:textColor="#FFFFFF"
-        app:cornerRadius="40dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/cameraCard" />
+            <androidx.camera.view.PreviewView
+                android:id="@+id/viewFinder"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
 
-    <!-- Gallery Button -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnGallery"
-        android:layout_width="wrap_content"
-        android:layout_height="60dp"
-        android:layout_marginEnd="16dp"
-        android:backgroundTint="#1E90FF"
-        android:text="Gallery"
-        android:textColor="#FFFFFF"
-        app:cornerRadius="20dp"
-        app:layout_constraintBottom_toBottomOf="@id/btnCapture"
-        app:layout_constraintEnd_toStartOf="@id/btnCapture"
-        app:layout_constraintTop_toTopOf="@id/btnCapture" />
+            <View
+                android:id="@+id/alignmentOverlay"
+                android:layout_width="120dp"
+                android:layout_height="80dp"
+                android:layout_gravity="center"
+                android:alpha="0.2"
+                android:background="@drawable/ic_launcher_background"
+                android:visibility="visible" />
 
-    <!-- Upload Button -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnUpload"
-        android:layout_width="wrap_content"
-        android:layout_height="60dp"
-        android:layout_marginStart="16dp"
-        android:backgroundTint="#FFA500"
-        android:enabled="false"
-        android:text="Upload 🚀"
-        android:textColor="#FFFFFF"
-        app:cornerRadius="20dp"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="@id/btnCapture"
-        app:layout_constraintStart_toEndOf="@id/btnCapture"
-        app:layout_constraintTop_toTopOf="@id/btnCapture" />
+            <LinearLayout
+                android:id="@+id/previewContainer"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#F7F8FC"
+                android:orientation="vertical"
+                android:visibility="gone"
+                android:weightSum="2">
 
-    <!-- Navigation Buttons -->
-    <Button
-        android:id="@+id/btnAnalytics"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="24dp"
-        android:layout_marginBottom="16dp"
-        android:backgroundTint="#FFA500"
-        android:text="Analytics"
-        android:textColor="#FFFFFF"
-        app:layout_constraintBottom_toTopOf="@id/btnHistory"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+                <ImageView
+                    android:id="@+id/previewImage"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:scaleType="centerCrop" />
 
-    <Button
-        android:id="@+id/btnHistory"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="24dp"
-        android:layout_marginBottom="24dp"
-        android:backgroundTint="#1E90FF"
-        android:text="History"
-        android:textColor="#FFFFFF"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+                <LinearLayout
+                    android:id="@+id/segmentationLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:visibility="invisible">
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:padding="8dp">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Eye"
+                            android:textAlignment="center"
+                            android:textColor="#333333"
+                            android:textStyle="bold" />
+
+                        <ImageView
+                            android:id="@+id/imgEyeSegment"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:scaleType="fitCenter" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:padding="8dp">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Conjunctiva"
+                            android:textAlignment="center"
+                            android:textColor="#333333"
+                            android:textStyle="bold" />
+
+                        <ImageView
+                            android:id="@+id/imgConjunctivaSegment"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:scaleType="fitCenter" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <com.google.android.material.progressindicator.CircularProgressIndicator
+                android:id="@+id/uploadProgress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:visibility="gone"
+                app:indicatorColor="#FFA500"
+                app:indicatorSize="80dp"
+                app:trackColor="#E0E0E0"
+                app:trackThickness="8dp" />
+        </androidx.cardview.widget.CardView>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCapture"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:layout_marginTop="24dp"
+            android:backgroundTint="#388E3C"
+            android:insetLeft="0dp"
+            android:insetTop="0dp"
+            android:insetRight="0dp"
+            android:insetBottom="0dp"
+            android:text="📷"
+            android:textColor="#FFFFFF"
+            android:textSize="24sp"
+            app:cornerRadius="40dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/cameraCard" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnGallery"
+            android:layout_width="wrap_content"
+            android:layout_height="56dp"
+            android:layout_marginEnd="16dp"
+            android:backgroundTint="#1E90FF"
+            android:text="Gallery"
+            android:textColor="#FFFFFF"
+            app:cornerRadius="20dp"
+            app:layout_constraintBottom_toBottomOf="@id/btnCapture"
+            app:layout_constraintEnd_toStartOf="@id/btnCapture"
+            app:layout_constraintTop_toTopOf="@id/btnCapture" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnUpload"
+            android:layout_width="wrap_content"
+            android:layout_height="56dp"
+            android:layout_marginStart="16dp"
+            android:backgroundTint="#FFA500"
+            android:enabled="false"
+            android:text="Upload 🚀"
+            android:textColor="#FFFFFF"
+            android:visibility="gone"
+            app:cornerRadius="20dp"
+            app:layout_constraintBottom_toBottomOf="@id/btnCapture"
+            app:layout_constraintStart_toEndOf="@id/btnCapture"
+            app:layout_constraintTop_toTopOf="@id/btnCapture" />
+
+        <Button
+            android:id="@+id/btnAnalytics"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="24dp"
+            android:layout_marginTop="32dp"
+            android:backgroundTint="#FFA500"
+            android:text="Analytics"
+            android:textColor="#FFFFFF"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/btnCapture" />
+
+        <Button
+            android:id="@+id/btnHistory"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="24dp"
+            android:layout_marginTop="12dp"
+            android:backgroundTint="#1E90FF"
+            android:text="History"
+            android:textColor="#FFFFFF"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/btnAnalytics" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</ScrollView>
