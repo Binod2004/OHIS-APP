@@ -31,7 +31,20 @@
         app:strokeColor="#333333"
         app:layout_constraintBottom_toBottomOf="@id/tvHeader"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginEnd="24dp"
+        android:layout_marginEnd="16dp"
+        app:layout_constraintTop_toTopOf="@id/tvHeader" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnSwitchCamera"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🔄"
+        android:textColor="#333333"
+        app:strokeColor="#333333"
+        app:layout_constraintBottom_toBottomOf="@id/tvHeader"
+        app:layout_constraintStart_toStartOf="parent"
+        android:layout_marginStart="16dp"
         app:layout_constraintTop_toTopOf="@id/tvHeader" />
 
     <!-- Error Message TextView -->

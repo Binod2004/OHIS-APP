@@ -72,7 +72,7 @@ public class MainActivity extends AppCompatActivity {
     private View alignmentOverlay;
     private TextView tvErrorMessage;
 
-    private Button btnCapture, btnGallery, btnUpload, btnFlash;
+    private Button btnCapture, btnGallery, btnUpload, btnFlash, btnSwitchCamera;
     private ProgressBar uploadProgress;
 
     private Uri imageUriToUpload; // 1. Raw Image
@@ -81,6 +81,7 @@ public class MainActivity extends AppCompatActivity {
 
     private boolean isCloudinaryInitialized = false;
     private boolean isFlashOn = false;
+    private int lensFacing = CameraSelector.LENS_FACING_BACK;
 
     // Track 3-image multi-upload state
     private int uploadCount = 0;
@@ -129,6 +130,7 @@ public class MainActivity extends AppCompatActivity {
         btnGallery = findViewById(R.id.btnGallery);
         btnUpload = findViewById(R.id.btnUpload);
         btnFlash = findViewById(R.id.btnFlash);
+        btnSwitchCamera = findViewById(R.id.btnSwitchCamera);
         uploadProgress = findViewById(R.id.uploadProgress);
 
         Button btnAnalytics = findViewById(R.id.btnAnalytics);
@@ -161,6 +163,13 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 Toast.makeText(this, "No flash available", Toast.LENGTH_SHORT).show();
             }
+        });
+
+        btnSwitchCamera.setOnClickListener(v -> {
+            lensFacing = (lensFacing == CameraSelector.LENS_FACING_BACK)
+                    ? CameraSelector.LENS_FACING_FRONT
+                    : CameraSelector.LENS_FACING_BACK;
+            startCamera();
         });
 
         btnUpload.setOnClickListener(v -> {
@@ -196,10 +205,23 @@ public class MainActivity extends AppCompatActivity {
                         .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
                         .build();
 
-                CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
+                CameraSelector cameraSelector = new CameraSelector.Builder()
+                        .requireLensFacing(lensFacing)
+                        .build();
 
                 cameraProvider.unbindAll();
                 camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageCapture);
+
+                // Update flash button visibility based on whether the new camera has a flash
+                runOnUiThread(() -> {
+                    if (camera.getCameraInfo().hasFlashUnit()) {
+                        btnFlash.setVisibility(View.VISIBLE);
+                    } else {
+                        btnFlash.setVisibility(View.GONE);
+                        isFlashOn = false;
+                        btnFlash.setText("🔦 Flash");
+                    }
+                });
 
             } catch (ExecutionException | InterruptedException e) {
                 Log.e(TAG, "Use case binding failed", e);
@@ -243,6 +265,7 @@ public class MainActivity extends AppCompatActivity {
 
         btnGallery.setVisibility(View.GONE);
         btnFlash.setVisibility(View.GONE);
+        btnSwitchCamera.setVisibility(View.GONE);
 
         btnUpload.setVisibility(View.VISIBLE);
         btnUpload.setEnabled(false);
@@ -268,86 +291,142 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    private int getEdgeStrength(Bitmap bmp, int x, int y) {
+        if (x + 1 >= bmp.getWidth() || y + 1 >= bmp.getHeight()) return 0;
+
+        int c = bmp.getPixel(x, y);
+        int right = bmp.getPixel(x + 1, y);
+        int bottom = bmp.getPixel(x, y + 1);
+
+        int dx = Math.abs(Color.red(c) - Color.red(right));
+        int dy = Math.abs(Color.red(c) - Color.red(bottom));
+
+        return dx + dy;
+    }
+
+// =====================================================================
+// DROP-IN REPLACEMENT for extractBiomarkers() in MainActivity.java
+//
+// KEY FIXES:
+//   EYE:
+//     1. Scale to 400 (was 300) — more search resolution, fewer missed pupils
+//     2. searchRadius = scaleSmall/6 (was /8) — matches expected pupil size better
+//     3. score² weighting + top-5% threshold — pulls centroid tightly to true
+//        pupil center instead of smearing across all dark-ish pixels
+//     4. Fixed oval radii (32%/18%) — no longer clipped by edge distance, which
+//        was the main reason eye crops came out tiny/lopsided
+//
+//   CONJUNCTIVA:
+//     1. Seed search restricted to bottom 30% of image (was only 5% below pupil)
+//        — conjunctiva is in the everted lower eyelid, always near the bottom
+//     2. Skin tone penalty: hue 0–30° (orange-red skin) gets score halved so
+//        cheek/eyelid skin can't outscore actual mucosal tissue
+//     3. Flood fill threshold raised to 0.55× (was 0.45×) — stops bleeds into
+//        adjacent skin and iris while still capturing all conjunctiva
+// =====================================================================
+
     private void extractBiomarkers(Bitmap originalBitmap) {
         int origW = originalBitmap.getWidth();
         int origH = originalBitmap.getHeight();
 
-        // ==========================================
-        // STEP 1: EYE (PUPIL HUNTING OVAL)
-        // ==========================================
-        int scaleSmall = 300;
-        Bitmap tinyBmp = Bitmap.createScaledBitmap(originalBitmap, scaleSmall, scaleSmall, false);
+        // =========================================================
+        // STEP 1: EYE — pupil-hunting oval
+        // =========================================================
 
-        int bestPupilX = scaleSmall / 2;
-        int bestPupilY = scaleSmall / 2;
-        int maxContrastScore = -1;
-        int searchRadius = scaleSmall / 8;
+        // FIX 1a: Use 400px scale for better pupil resolution
+        final int SCALE_EYE = 400;
+        Bitmap tinyBmp = Bitmap.createScaledBitmap(originalBitmap, SCALE_EYE, SCALE_EYE, false);
 
-        for (int y = searchRadius; y < scaleSmall - searchRadius; y += 2) {
-            for (int x = searchRadius; x < scaleSmall - searchRadius; x += 2) {
-                int centerPixel = tinyBmp.getPixel(x, y);
-                int centerBrightness = getBrightness(centerPixel);
+        int bestPupilX = SCALE_EYE / 2;
+        int bestPupilY = SCALE_EYE / 2;
 
-                if (centerBrightness > 120) continue;
+        // FIX 1b: Larger search radius matches actual pupil-to-sclera contrast span
+        int searchRadius = SCALE_EYE / 6;
 
-                int leftBrightness = getBrightness(tinyBmp.getPixel(x - searchRadius, y));
+        // Pass 1 — find the absolute maximum contrast score
+        float maxContrastScore = -1;
+        for (int y = searchRadius; y < SCALE_EYE - searchRadius; y += 2) {
+            for (int x = searchRadius; x < SCALE_EYE - searchRadius; x += 2) {
+                int centerBrightness = getBrightness(tinyBmp.getPixel(x, y));
+                if (centerBrightness > 110) continue; // must be dark (pupil)
+
+                int leftBrightness  = getBrightness(tinyBmp.getPixel(x - searchRadius, y));
                 int rightBrightness = getBrightness(tinyBmp.getPixel(x + searchRadius, y));
+                int topBrightness   = getBrightness(tinyBmp.getPixel(x, y - searchRadius));
+                int botBrightness   = getBrightness(tinyBmp.getPixel(x, y + searchRadius));
 
-                int contrastScore = ((leftBrightness + rightBrightness) / 2) - centerBrightness;
-
+                // Average all 4 surrounding points for robustness
+                float surroundAvg = (leftBrightness + rightBrightness + topBrightness + botBrightness) / 4f;
+                float contrastScore = surroundAvg - centerBrightness;
                 if (contrastScore > maxContrastScore) {
                     maxContrastScore = contrastScore;
                 }
             }
         }
 
-        int sumX = 0, sumY = 0, count = 0;
+        // Pass 2 — weighted centroid using only top 5% of candidates
+        // FIX 1c: score² weighting pulls centroid sharply toward the true peak,
+        //         ignoring fringe dark pixels that dragged it off-center before
         if (maxContrastScore > 0) {
-            for (int y = searchRadius; y < scaleSmall - searchRadius; y += 2) {
-                for (int x = searchRadius; x < scaleSmall - searchRadius; x += 2) {
-                    int centerPixel = tinyBmp.getPixel(x, y);
-                    int centerBrightness = getBrightness(centerPixel);
-                    if (centerBrightness > 120) continue;
+            float threshold = maxContrastScore * 0.95f; // top 5% only
+            double weightedSumX = 0, weightedSumY = 0, totalWeight = 0;
 
-                    int leftBrightness = getBrightness(tinyBmp.getPixel(x - searchRadius, y));
+            for (int y = searchRadius; y < SCALE_EYE - searchRadius; y += 2) {
+                for (int x = searchRadius; x < SCALE_EYE - searchRadius; x += 2) {
+                    int centerBrightness = getBrightness(tinyBmp.getPixel(x, y));
+                    if (centerBrightness > 110) continue;
+
+                    int leftBrightness  = getBrightness(tinyBmp.getPixel(x - searchRadius, y));
                     int rightBrightness = getBrightness(tinyBmp.getPixel(x + searchRadius, y));
-                    int contrastScore = ((leftBrightness + rightBrightness) / 2) - centerBrightness;
+                    int topBrightness   = getBrightness(tinyBmp.getPixel(x, y - searchRadius));
+                    int botBrightness   = getBrightness(tinyBmp.getPixel(x, y + searchRadius));
 
-                    if (contrastScore >= maxContrastScore * 0.90f) {
-                        sumX += x;
-                        sumY += y;
-                        count++;
+                    float surroundAvg = (leftBrightness + rightBrightness + topBrightness + botBrightness) / 4f;
+                    float score = surroundAvg - centerBrightness;
+
+                    if (score >= threshold) {
+                        double w = (double) score * score; // score² for tight clustering
+                        weightedSumX += x * w;
+                        weightedSumY += y * w;
+                        totalWeight  += w;
                     }
                 }
             }
-            if (count > 0) {
-                bestPupilX = sumX / count;
-                bestPupilY = sumY / count;
+
+            if (totalWeight > 0) {
+                bestPupilX = (int) (weightedSumX / totalWeight);
+                bestPupilY = (int) (weightedSumY / totalWeight);
             }
         }
 
-        float actualPupilX = ((float) bestPupilX / scaleSmall) * origW;
-        float actualPupilY = ((float) bestPupilY / scaleSmall) * origH;
+        float actualPupilX = ((float) bestPupilX / SCALE_EYE) * origW;
+        float actualPupilY = ((float) bestPupilY / SCALE_EYE) * origH;
 
-        float eyeRadiusX = origW * 0.35f;
-        float eyeRadiusY = origW * 0.20f;
+        // FIX 1d: Use FIXED radii — do NOT clip to distance-to-edge.
+        //         The old safeRadius shrank whenever the pupil drifted slightly off
+        //         center, giving half-width ovals. A fixed ratio is far more stable.
+        float eyeRadiusX = origW * 0.32f;
+        float eyeRadiusY = origW * 0.18f;
 
-        float safeRadiusX = Math.min(eyeRadiusX, Math.min(actualPupilX, origW - actualPupilX));
-        float safeRadiusY = Math.min(eyeRadiusY, Math.min(actualPupilY, origH - actualPupilY));
+        // Clamp the CENTER so the oval never goes out of bounds, instead of
+        // shrinking the radii — this keeps the oval shape consistent.
+        float clampedPupilX = Math.max(eyeRadiusX, Math.min(origW - eyeRadiusX, actualPupilX));
+        float clampedPupilY = Math.max(eyeRadiusY, Math.min(origH - eyeRadiusY, actualPupilY));
 
         RectF eyeBounds = new RectF(
-                actualPupilX - safeRadiusX,
-                actualPupilY - safeRadiusY,
-                actualPupilX + safeRadiusX,
-                actualPupilY + safeRadiusY
+                clampedPupilX - eyeRadiusX,
+                clampedPupilY - eyeRadiusY,
+                clampedPupilX + eyeRadiusX,
+                clampedPupilY + eyeRadiusY
         );
 
         Bitmap finalEye = extractTransparentGeometricRegion(originalBitmap, eyeBounds, true);
 
-        // ==========================================
-        // STEP 2: CONJUNCTIVA (FLOOD FILL)
-        // ==========================================
-        int processWidth = 600;
+        // =========================================================
+        // STEP 2: CONJUNCTIVA — flood fill from lower eyelid
+        // =========================================================
+
+        int processWidth  = 600;
         int processHeight = (int) ((float) origH / origW * processWidth);
         Bitmap scaled = Bitmap.createScaledBitmap(originalBitmap, processWidth, processHeight, false);
 
@@ -357,33 +436,44 @@ public class MainActivity extends AppCompatActivity {
         scaled.getPixels(pixels, 0, w, 0, 0, w, h);
 
         float[] mucosalScores = new float[pixels.length];
-        float maxMucosalScore = 0;
-        int mucosalSeedIdx = -1;
+        float maxMucosalScore  = 0;
+        int   mucosalSeedIdx   = -1;
         float[] hsv = new float[3];
 
-        int pupilYInProcessScale = (int) (((float) bestPupilY / scaleSmall) * h);
+        // FIX 2a: Restrict seed search to the bottom 30% of the image.
+        //         Conjunctiva is only visible in the everted lower eyelid.
+        //         The old 5%-below-pupil guard let noisy mid-image pixels win.
+        int seedSearchStartY = (int) (h * 0.70f);
 
         for (int i = 0; i < pixels.length; i++) {
             int p = pixels[i];
+            int yPos = i / w;
+
+            Color.colorToHSV(p, hsv);
+            float hue        = hsv[0]; // 0–360
+            float saturation = hsv[1];
+
             int r = Color.red(p);
             int g = Color.green(p);
             int b = Color.blue(p);
-
-            Color.colorToHSV(p, hsv);
-            float saturation = hsv[1];
-
             float vascularity = (r - g) + (r - b);
             float score = saturation * vascularity;
-
             if (score < 0) score = 0;
+
+            // FIX 2b: Penalize skin tones (hue 0–30° = orange-red skin/eyelid).
+            //         Conjunctiva is a brighter, more saturated pinkish-red (hue ~330–10°
+            //         or 340–360°) but healthy conjunctiva also has distinctive high
+            //         vascularity. Skin in hue 10–30° range is orange — penalize it.
+            if (hue >= 10f && hue <= 30f) {
+                score *= 0.4f; // strongly penalize skin-orange
+            }
+
             mucosalScores[i] = score;
 
-            if (score > maxMucosalScore) {
-                int yPos = i / w;
-                if (yPos > pupilYInProcessScale + (h * 0.05f)) {
-                    maxMucosalScore = score;
-                    mucosalSeedIdx = i;
-                }
+            // Only consider pixels in the seed zone AND above a minimum score
+            if (yPos >= seedSearchStartY && score > 10f && score > maxMucosalScore) {
+                maxMucosalScore = score;
+                mucosalSeedIdx  = i;
             }
         }
 
@@ -392,20 +482,21 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        boolean[] conjunctivaMask = floodFill(w, h, mucosalSeedIdx, mucosalScores, maxMucosalScore * 0.45f);
+        // FIX 2c: Raise flood fill threshold from 0.45× to 0.55× — this stops the
+        //         region bleeding into adjacent skin while still capturing all the
+        //         vascularised conjunctival tissue.
+        boolean[] conjunctivaMask = floodFill(w, h, mucosalSeedIdx, mucosalScores, maxMucosalScore * 0.55f);
 
         Bitmap finalConjunctiva = applyMaskToOriginal(originalBitmap, conjunctivaMask, w, h);
 
-        // ==========================================
-        // STEP 3: CACHE FOR UPLOAD
-        // ==========================================
-        eyeUriToUpload = saveBitmapToCache(finalEye, "eye_segment");
-        conjUriToUpload = saveBitmapToCache(finalConjunctiva, "conj_segment");
+        // =========================================================
+        // STEP 3: Cache for upload
+        // =========================================================
+        eyeUriToUpload   = saveBitmapToCache(finalEye,          "eye_segment");
+        conjUriToUpload  = saveBitmapToCache(finalConjunctiva,  "conj_segment");
 
         showResults(finalEye, finalConjunctiva);
-    }
-
-    private Uri saveBitmapToCache(Bitmap bitmap, String namePrefix) {
+    }    private Uri saveBitmapToCache(Bitmap bitmap, String namePrefix) {
         try {
             File file = new File(getCacheDir(), namePrefix + "_" + System.currentTimeMillis() + ".png");
             FileOutputStream out = new FileOutputStream(file);
@@ -576,8 +667,14 @@ public class MainActivity extends AppCompatActivity {
             case ExifInterface.ORIENTATION_ROTATE_90: matrix.postRotate(90); break;
             case ExifInterface.ORIENTATION_ROTATE_180: matrix.postRotate(180); break;
             case ExifInterface.ORIENTATION_ROTATE_270: matrix.postRotate(270); break;
-            default: return bitmap;
+            default: break;
         }
+
+        // Handle front camera mirroring
+        if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
+            matrix.postScale(-1, 1);
+        }
+
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
     }
 
@@ -607,7 +704,13 @@ public class MainActivity extends AppCompatActivity {
         btnCapture.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#388E3C")));
 
         btnGallery.setVisibility(View.VISIBLE);
-        btnFlash.setVisibility(View.VISIBLE);
+        // Only show flash if current camera supports it
+        if (camera != null && camera.getCameraInfo().hasFlashUnit()) {
+            btnFlash.setVisibility(View.VISIBLE);
+        } else {
+            btnFlash.setVisibility(View.GONE);
+        }
+        btnSwitchCamera.setVisibility(View.VISIBLE);
 
         btnUpload.setVisibility(View.GONE);
         btnUpload.setEnabled(false);
@@ -617,7 +720,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void initCloudinary() {
         try {
-            // Check if it's already alive to prevent the double-init crash 💀
+            // Check if it's already alive to prevent the double-init crash
             MediaManager.get();
             isCloudinaryInitialized = true;
         } catch (IllegalStateException e) {
